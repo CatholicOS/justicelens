@@ -1,0 +1,324 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "JusticeLens Free Legal Data Actions",
+    "version": "1.1.1",
+    "description": "Combined free Actions for JusticeLens using CourtListener / Free Law Project APIs. Includes: Opinions search, Citation lookup (Eyecite), and RECAP Dockets search. No authentication required for basic usage. Be mindful of rate limits and terms of use.",
+    "termsOfService": "https://www.courtlistener.com/terms-of-service/",
+    "x-usage-guidance": {
+      "overview": "These Actions are designed to provide lightweight, authoritative lookups for caselaw and existing federal dockets. They should be called sparingly with narrow, high-precision queries to avoid noisy results.",
+      "global_rules": [
+        "Prefer official sources and return jurisdiction + year parentheticals for any caselaw you cite.",
+        "Limit to the top 1\u20133 most relevant hits; summarize briefly and include links.",
+        "If no relevant results are found, say so and offer a next step (refine query, check another jurisdiction, or consult counsel)."
+      ],
+      "when_to_call_examples": [
+        "Need a short supporting case for an identified issue \u2192 call searchOpinions with a tight query and date range.",
+        "Need to confirm a reporter citation the model mentioned \u2192 call lookupCitations.",
+        "User provides a federal docket number/case name \u2192 call searchRecapDockets to check if filings exist in the free RECAP archive."
+      ]
+    }
+  },
+  "servers": [
+    {
+      "url": "https://www.courtlistener.com/api/rest/v3",
+      "description": "CourtListener REST API base"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Opinions",
+      "description": "Search caselaw opinions for authority and summaries"
+    },
+    {
+      "name": "Citations",
+      "description": "Validate and resolve legal citations (Eyecite)"
+    },
+    {
+      "name": "Dockets (RECAP)",
+      "description": "Search RECAP archive for federal dockets and filings"
+    }
+  ],
+  "paths": {
+    "/opinions/": {
+      "get": {
+        "tags": [
+          "Opinions"
+        ],
+        "operationId": "searchOpinions",
+        "summary": "Search opinions",
+        "description": "Search caselaw opinions. Use for short, on-point authorities to support identified issues. Provide tight queries and limit page_size to reduce noise.",
+        "x-when-to-call": "- When an issue has been identified and you need 1\u20133 supporting cases from the correct jurisdiction and timeframe.\n- When compiling the Authority column in the Lawyer View issue matrix.",
+        "x-response-handling": "- Return at most the top 3 results.\n- For each, provide: court, decision date (YYYY-MM-DD), citation if available, a one-line holding/parenthetical, and the URL.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "citation",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact citation (optional), e.g., \"530 U.S. 466\"."
+          },
+          {
+            "in": "query",
+            "name": "court",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Court slugs (comma-separated). See CourtListener docs for slugs."
+          },
+          {
+            "in": "query",
+            "name": "jurisdiction",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jurisdiction filter (e.g., \"federal\", \"state\")."
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Full-text search query (use quotes/AND/OR for precision)."
+          },
+          {
+            "in": "query",
+            "name": "cluster__date_filed_min",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Earliest decision date (YYYY-MM-DD)."
+          },
+          {
+            "in": "query",
+            "name": "cluster__date_filed_max",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Latest decision date (YYYY-MM-DD)."
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "schema": {
+              "type": "integer",
+              "default": 5,
+              "maximum": 20
+            },
+            "description": "Number of results to return (keep small for Action use)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON results of matching opinions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": [
+                              "integer",
+                              "string"
+                            ]
+                          },
+                          "absolute_url": {
+                            "type": "string"
+                          },
+                          "caseName": {
+                            "type": "string"
+                          },
+                          "dateFiled": {
+                            "type": "string"
+                          },
+                          "citation": {
+                            "type": "string"
+                          },
+                          "court": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/citations/": {
+      "get": {
+        "tags": [
+          "Citations"
+        ],
+        "operationId": "lookupCitations",
+        "summary": "Lookup/validate citations (Eyecite)",
+        "description": "Resolve and validate legal citations to reduce hallucinations and confirm reporter data.",
+        "x-when-to-call": "- When the model or user references a legal citation and you want to validate it before including it in the output.\n- When converting a free-text cite into normalized metadata.",
+        "x-response-handling": "- If a match is found, return the normalized citation, court, decision year, and a URL.\n- If not found, state clearly that the citation could not be verified and suggest verifying manually.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "citation",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Legal citation, e.g., \"530 U.S. 466\"."
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "schema": {
+              "type": "integer",
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching citations and metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "citation": {
+                            "type": "string"
+                          },
+                          "case_name": {
+                            "type": "string"
+                          },
+                          "court": {
+                            "type": "string"
+                          },
+                          "year": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dockets/": {
+      "get": {
+        "tags": [
+          "Dockets (RECAP)"
+        ],
+        "operationId": "searchRecapDockets",
+        "summary": "Search RECAP dockets",
+        "description": "Search for existing federal dockets in the free RECAP archive. For brand-new PACER documents not in RECAP, users must use PACER (paid). This Action only queries the free archive.",
+        "x-when-to-call": "- When the user provides a federal docket number, party name, or case name and wants to know whether filings are in the free RECAP archive.",
+        "x-response-handling": "- Return the most likely docket with court, docket number, case name, and a URL to the RECAP page.\n- If nothing is found, state that the item may not be in RECAP and that PACER (paid) might be required for fresh documents.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "case_name",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Case name or caption text."
+          },
+          {
+            "in": "query",
+            "name": "court",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Court slug (e.g., \"ca11\", \"nysd\")."
+          },
+          {
+            "in": "query",
+            "name": "docket_number",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Docket number (as formatted by the court)."
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "schema": {
+              "type": "integer",
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Docket search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": [
+                              "integer",
+                              "string"
+                            ]
+                          },
+                          "court": {
+                            "type": "string"
+                          },
+                          "docket_number": {
+                            "type": "string"
+                          },
+                          "case_name": {
+                            "type": "string"
+                          },
+                          "absolute_url": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
